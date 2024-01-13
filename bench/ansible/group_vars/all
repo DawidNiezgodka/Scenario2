@@ -2,7 +2,7 @@
 
 
 gittoken: ""
-git_repo: "https://{{gittoken}}@github.com/user/B3.git"
+git_repo: "https://{{gittoken}}@github.com/DawidNiezgodka/tinyFaaS-bench.git"
 user_home_path: '/home/user'
 usr_name: 'usr'
 benchmark_project: "/home/{{usr_name}}/tinyfaas"
