@@ -1,0 +1,92 @@
+---
+- name: Install required packages
+  hosts: edge-servers
+  become: true
+
+  tasks:
+    - name: Update package index
+      apt:
+        update_cache: yes
+
+    - name: Install prerequisite packages for Go
+      apt:
+        name: [wget, tar]
+        state: present
+
+    - name: Download Go binary
+      get_url:
+        url: "https://golang.org/dl/go1.20.linux-amd64.tar.gz"
+        dest: "/tmp/go1.20.linux-amd64.tar.gz"
+
+    - name: Extract Go binary
+      unarchive:
+        src: "/tmp/go1.20.linux-amd64.tar.gz"
+        dest: "/usr/local"
+        remote_src: yes
+
+    - name: Add Go binary to PATH
+      lineinfile:
+        path: "/etc/environment"
+        regexp: '^PATH='
+        line: "PATH=\"/usr/local/go/bin:{{ ansible_env.PATH }}\""
+        state: present
+
+    - name: Update secure_path in sudoers for Go
+      lineinfile:
+        path: /etc/sudoers
+        regexp: '^(.*)secure_path(.*)$'
+        line: 'Defaults	secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin:/usr/local/go/bin"'
+        backrefs: yes
+
+    - name: Add Docker APT Key
+      apt_key:
+        url: "https://download.docker.com/linux/ubuntu/gpg"
+
+    - name: Add Docker Repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+
+    - name: Install Docker
+      apt:
+        name: "docker-ce=5:24.*"
+        state: present
+        update_cache: yes
+
+    - name: Reboot the machine
+      ansible.builtin.reboot:
+
+    - name: Install Make
+      apt:
+        name: make
+        state: present
+
+    - name: Create a directory named 'tiny' in /home/user1
+      file:
+        path: /home/user/tinyfaas
+        state: directory
+
+    - name: Clone a specific Git repository into the 'tiny' directory
+      git:
+        repo: 'https://github.com/OpenFogStack/tinyFaaS.git'
+        dest: '/home/user/tinyfaas'
+
+    - name: Execute make build
+      command: make build
+      args:
+          chdir: "{{ benchmark_project}}"
+
+
+    - name: Create mng systemd service file
+      template:
+        src: service_template.j2
+        dest: /etc/systemd/system/mng.service
+
+    - name: Reload systemd
+      systemd:
+        daemon_reload: yes
+
+    - name: Enable and start mng service
+      systemd:
+        name: mng
+        enabled: yes
+        state: started

@@ -1,0 +1,13 @@
+[Unit]
+Description=Your Service Description
+After=network.target
+
+[Service]
+WorkingDirectory={{ benchmark_project }}
+ExecStart={{ benchmark_project }}/manager
+Restart=always
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+on:
+  workflow_call:
+jobs:
+  CD-test:
+    name: CD-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Run CD tests
+        run: |
+          echo "Running continuous deployment tests"

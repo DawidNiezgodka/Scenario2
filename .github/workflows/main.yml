@@ -1,0 +1,42 @@
+name: CI-CB-CD pipeline
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  CI:
+    name: continuous integration
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  CB:
+    name: continuous benchmarking
+    needs: [CI]
+    permissions:
+      contents: write
+      id-token: write
+    uses: DawidNiezgodka/CB-Framework/.github/workflows/continuous_benchmarking.yml@main
+    with:
+      bench_dir: bench/
+      number_of_metrics_to_evaluate: 4
+      infra_instance_meta_public_key: terraform/publickeys/public_key.pub
+      infra_vars_file_path: terraform/input.tfvars
+      infra_destroy_after_run: true
+      infra_ensure_fetching_latest_from: main
+      snr_execution_order: setup_tinyfaas, setup_wg, run, save_res
+      eval_bench_group_name: Infra-N2-family
+      eval_bench_group_to_compare: Infra-E2-family
+      eval_evaluation_method: previous
+      eval_comparison_operators: bigger, smaller, smaller, smaller
+      eval_comparison_margins: -1, -1, -1, -1
+      eval_metrics_to_evaluate: throughput, 95th percentile latency, 99th percentile latency, median latency
+      eval_comment_to_commit: on
+      eval_bucket_result_file_path: b2/n2-standard-2.json
+    secrets: inherit
+
+  CD:
+    name: continuous deployment
+    needs: [CB]
+    uses: ./.github/workflows/cd.yml

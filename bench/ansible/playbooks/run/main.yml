@@ -1,0 +1,13 @@
+---
+- hosts: workload-generators
+  become: yes
+  tasks:
+
+    - name: Determine tinyfaas IP
+      set_fact:
+        tinyfaas_ip: "{{ hostvars['edge-server1']['ansible_host'] }}"
+
+    - name: Execute http bench
+      command: node index.js --threads={{ threads }} --ops={{ ops }} --host={{ tinyfaas_ip }} --function={{ function }} --agentreuse=false --timeout=100000
+      args:
+        chdir: "{{ http_bench_folder }}"
