@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Metrics Visualization</title>
+    <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-moment@1.0.1/dist/chartjs-adapter-moment.min.js"></script>
+    <style>
+        #chartContainer {
+            max-width: 1400px;
+            max-height: 1100px;
+            margin: auto;
+        }
+    </style>
+</head>
+<body>
+<div>
+    <label>Select Benchmark:</label>
+    <label for="benchmarkSelector"></label><select id="benchmarkSelector"></select>
+</div>
+<div>
+    <label>Select Metric:</label>
+    <label for="metricSelector"></label><select id="metricSelector"></select>
+</div>
+<div>
+    <button id="toggleAvgLine">Toggle Average Line</button>
+</div>
+
+<div>
+    <label for="lowerBound">Lower Bound:</label>
+    <input type="number" id="lowerBound" placeholder="Enter lower bound">
+    <label for="upperBound">Upper Bound:</label>
+    <input type="number" id="upperBound" placeholder="Enter upper bound">
+    <button id="updateBounds">Update Bounds</button>
+</div>
+
+<div id="chartContainer">
+    <canvas id="myChart"></canvas>
+</div>
+
+
+<script>
+    let myChart = null;
+    const ctx = document.getElementById('myChart').getContext('2d');
+    const benchmarkSelector = document.getElementById('benchmarkSelector');
+    const metricSelector = document.getElementById('metricSelector');
+    let data;
+
+
+    let lowerBound = 0;
+    let upperBound = 0;
+    let avgLine = null;
+    let currentlySelectedBenchmark = null;
+
+    benchmarkSelector.addEventListener('change', populateMetrics);
+    metricSelector.addEventListener('change', updateChart);
+
+    async function fetchData() {
+        const response = await fetch('data.json');
+        data = await response.json();
+        if (data.entries) {
+            populateBenchmarks();
+        }
+        //populateBenchmarks();
+    }
+
+    function populateBenchmarks() {
+        for (const benchmark in data.entries) {
+            const option = document.createElement('option');
+            option.value = benchmark;
+            option.textContent = benchmark;
+            benchmarkSelector.appendChild(option);
+        }
+        populateMetrics();
+    }
+
+    function populateMetrics() {
+        metricSelector.innerHTML = '';
+        const selectedBenchmark = benchmarkSelector.value;
+        currentlySelectedBenchmark = selectedBenchmark;
+        const allMetrics = new Set();
+        data.entries[selectedBenchmark].forEach(entry => {
+            entry.metrics.forEach(metric => {
+                allMetrics.add(metric.name);
+            });
+        });
+
+        allMetrics.forEach(metricName => {
+            const option = document.createElement('option');
+            option.value = metricName;
+            option.textContent = metricName;
+            metricSelector.appendChild(option);
+        });
+
+        updateChart();
+    }
+
+    function getEvaluationResults(benchmark, metric) {
+        return data.entries[benchmark].map(entry => {
+            if (entry.evaluation && entry.evaluation.evaluationResult
+                && entry.evaluation.evaluationParams) {
+                const metricIndex = entry.evaluation.evaluationParams.metricNames.indexOf(metric);
+                return entry.evaluation.evaluationResult.result[metricIndex];
+            }
+            return null;
+        });
+    }
+
+    function updateChart() {
+        const selectedBenchmark = benchmarkSelector.value;
+        const selectedMetric = metricSelector.value;
+
+        const dates = [];
+        const commits = [];
+        const values = [];
+        let unit = "";
+
+        let entries = data.entries[selectedBenchmark];
+        if (entries.length > 0) {
+            let lastEntry = entries[entries.length - 1];
+            let metricObj = lastEntry.metrics.find(m => m.name === selectedMetric);
+            if (metricObj) {
+                unit = metricObj.unit;
+            }
+        }
+
+        const evaluationResults = getEvaluationResults(selectedBenchmark, selectedMetric);
+        for (let entry of data.entries[selectedBenchmark]) {
+
+            dates.push(moment(entry.date).format('YYYY-MM-DD HH:mm'));
+            commits.push(entry.commit.id);
+            const metricValue = entry.metrics.find(m => m.name === selectedMetric)?.value;
+            values.push(metricValue ?? null);
+        }
+
+        const boundDatasets = [
+            {
+                label: 'Lower Bound',
+                data: Array(dates.length).fill(lowerBound),
+                borderColor: 'blue',
+                borderWidth: 2,
+                pointRadius: 0,
+                fill: false,
+            },
+            {
+                label: 'Upper Bound',
+                data: Array(dates.length).fill(upperBound),
+                borderColor: 'red',
+                borderWidth: 2,
+                pointRadius: 0,
+                fill: '-1',
+            }
+        ];
+
+        if (myChart) {
+            myChart.destroy();
+        }
+
+        myChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: commits.map(commit => commit.substring(0, 8)),
+                datasets: [
+                    {
+                        label: selectedMetric,
+                        data: values,
+                        pointBackgroundColor: evaluationResults.map(result => result === "passed" ? "green" : "red"),
+                        pointRadius: evaluationResults.map(result => result ? 6 : 3),
+                        borderColor: 'green',
+                        fill: false,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                layout: {
+                    padding: {
+                        left: 60,
+                        right: 10,
+                        top: 10,
+                        bottom: 10
+                    }
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Shortened commit hash'
+                        },
+                        ticks: {
+                            autoSkip: true,
+                            maxRotation: 75,
+                            minRotation: 75,
+                            color: '#555555'
+                        },
+                        grid: {
+                            drawBorder: false,
+                            color: '#D6D6D6'
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: unit
+                        },
+                        ticks: {
+                            color: '#555555'
+                        },
+                        grid: {
+                            drawBorder: false,
+                            color: '#D6D6D6'
+                        }
+                    }
+                },
+                elements: {
+                    line: {
+                        tension: 0,
+                        borderColor: '#2C3E50',
+                        borderWidth: 2
+                    },
+                    point: {
+                        backgroundColor: '#E74C3C'
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            afterTitle: items => {
+                                const index = items[0].dataIndex;
+                                const dataEntry = data.entries[selectedBenchmark][index];
+                                return '\n Commit message: ' + dataEntry.commit.message +
+                                    '\n Commit time: ' + dataEntry.commit.timestamp +
+                                    ' \n Committed by: ' + dataEntry.commit.committer.username + '\n' +
+                                    ' \n Full commit hash: ' + dataEntry.commit.id + '\n';
+                            },
+                            label: item => {
+                                const dataEntry = data.entries[selectedBenchmark][item.dataIndex];
+                                const info = dataEntry.otherInfo;
+                                return 'Benchmark information: ' + info;
+                            },
+                            afterLabel: item => {
+                                const dataEntry = data.entries[selectedBenchmark][item.dataIndex];
+                                const evalParams = dataEntry.evaluation ? dataEntry.evaluation.evaluationParams : null;
+
+                                var tooltipString = "Parameters: \n" +
+                                    Object.keys(dataEntry.parametrization).map(key => `${key}: ${dataEntry.parametrization[key]}`).join('\n');
+
+                                if (evalParams) {
+                                    const metricIndex = evalParams.metricNames.indexOf(selectedMetric);
+                                    const currentVal = evalParams.is[metricIndex];
+                                    const shouldBe = evalParams.shouldBe[metricIndex];
+                                    const referenceVal = evalParams.than[metricIndex];
+
+                                    tooltipString += "\n\nEvaluation method: " + evalParams.evaluationMethod + "\n" +
+
+                                        "Current value: " + currentVal + "\n" +
+                                        "Should be: " + shouldBe + "\n" +
+                                        "Reference value: " + referenceVal;
+                                }
+                                return tooltipString;
+                            }                        }
+                    },
+                    legend: {
+                        display: false,
+                        labels: {
+                            color: '#555555'
+                        }
+                    }
+
+                }
+            }
+
+        });
+        myChart.data.datasets.push(...boundDatasets);
+    }
+
+
+    fetchData();
+
+    document.getElementById('updateBounds').addEventListener('click', () => {
+        lowerBound = parseFloat(document.getElementById('lowerBound').value);
+        upperBound = parseFloat(document.getElementById('upperBound').value);
+        updateChart();
+    });
+
+    function calculateAverage(data, metricName) {
+        let sum = 0;
+        let count = 0;
+        if (data.entries[currentlySelectedBenchmark]) {
+            data.entries[currentlySelectedBenchmark].forEach(entry => {
+                let metric = entry.metrics.find(m => m.name === metricName);
+                if (metric) {
+
+                    sum += metric.value;
+                    count++;
+                }
+            });
+        }
+
+        return count > 0 ? sum / count : 0;
+    }
+
+    document.getElementById('toggleAvgLine').addEventListener('click', function() {
+        const selectedMetric = document.getElementById('metricSelector').value;
+        if (avgLine) {
+            myChart.data.datasets.splice(myChart.data.datasets.indexOf(avgLine), 1);
+            avgLine = null;
+        } else {
+            const average = calculateAverage(data, selectedMetric);
+            avgLine = {
+                label: 'Average of ' + selectedMetric,
+                data: Array(data.length).fill(average),
+                borderColor: 'red',
+                borderWidth: 10,
+                pointRadius: 10,
+                type: 'line'
+            };
+            myChart.data.datasets.push(avgLine);
+        }
+        myChart.update();
+    });
+
+</script>
+</body>
+</html>
+
