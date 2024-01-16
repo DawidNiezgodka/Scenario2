@@ -1,5 +1,6 @@
 # Scenario2
-The second scenario for validating the CB framework
+The second scenario for validating the CB framework.
+The benchmark accompying this scenario can be found [here](https://github.com/DawidNiezgodka/tinyFaaS-bench).
 
 ## Caveat
 This is a preview-only repository.
